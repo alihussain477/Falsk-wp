@@ -1,31 +1,39 @@
-from flask import Flask, render_template, request
-import subprocess
-import os
+from flask import Flask, render_template, request, Response, redirect, url_for
+import subprocess, os, shlex
 
 app = Flask(__name__)
 
-@app.route('/')
+@app.route("/")
 def home():
     return render_template("index.html")
 
-@app.route('/send', methods=['POST'])
+# ---------- Pair route ----------
+@app.route("/pair", methods=["POST"])
+def pair():
+    phone = request.form["phone"]
+    cmd   = f"node sender.js pair {phone}"
+    # stdout को रियल-टाइम दिखाने के लिये streaming response
+    def generate():
+        with subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, text=True) as p:
+            for line in p.stdout:
+                yield line.replace("\n","<br>")  # HTML line-break
+    return Response(generate(), mimetype="text/html")
+
+# ---------- Send route ----------
+@app.route("/send", methods=["POST"])
 def send():
-    target = request.form['target']
-    header = request.form['header']
-    delay = request.form['delay']
-    message_file = request.files['message_file']
-    
-    # Save uploaded file
-    file_path = f'messages.txt'
-    message_file.save(file_path)
+    target  = request.form["target"]
+    header  = request.form["header"]
+    delay   = request.form["delay"]
+    mf      = request.files["message_file"]
+    file_path = "messages.txt"
+    mf.save(file_path)
 
-    # Call Node script
     subprocess.Popen([
-        'node', 'sender.js',
-        target, header, delay, file_path
+        "node", "sender.js",
+        "send", target, header, delay, file_path
     ])
-
-    return 'Message sending started!'
+    return "मैसेज भेजना शुरू ✔️ — लॉग Render-logs में दिखेंगे!"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
